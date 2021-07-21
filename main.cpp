@@ -1,4 +1,5 @@
 #include <bits/stdc++.h>
+#include "bitmap_image.hpp"
 
 using namespace std;
 
@@ -9,25 +10,43 @@ double lookX, lookY, lookZ;
 double upX, upY, upZ;
 double fovY, aspectRatio, near, far;
 
-double screenWidth, screenHeight;
+int screenWidth, screenHeight;
 double xLimit, yLimit;
 double zFrontLimit, zRearLimit;
 
 ofstream stageFile;
 
+class Color {
+public:
+    int r, g, b;
+    Color();
+    Color(int r, int g, int b);
+};
+
+Color::Color() {
+
+}
+
+Color::Color(int r, int g, int b) {
+    this->r = r;
+    this->g = g;
+    this->b = b;
+}
+
 class Point {
 public:
-    double x{}, y{}, z{}, w;
+    double x, y, z, w;
     Point();
     Point(double x, double y, double z);
+    Point(const Point &p1);
     double getCoordinate(int index) const;
     void setCoordinate(int index, double val);
     void wScale();
     void print() const;
-    double dotProduct(Point p) const;
-    Point crossProduct(Point p) const;
+    double dotProduct(const Point& p) const;
+    Point crossProduct(const Point& p) const;
     Point scalarMultiply(double s) const;
-    Point subtract(Point p) const;
+    Point subtract(const Point& p) const;
     void normalize();
 };
 
@@ -40,6 +59,13 @@ Point::Point(double x, double y, double z) {
     this->y = y;
     this->z = z;
     this->w = 1;
+}
+
+Point::Point(const Point &p1) {
+    this->x = p1.x;
+    this->y = p1.y;
+    this->z = p1.z;
+    this->w = p1.w;
 }
 
 double Point::getCoordinate(int index) const {
@@ -73,14 +99,14 @@ void Point::print() const {
     stageFile << setprecision(7) << fixed << this->x << " " << this->y << " " << this->z << endl;
 }
 
-double Point::dotProduct(Point p) const {
+double Point::dotProduct(const Point& p) const {
     double a = this->x * p.x;
     double b = this->y * p.y;
     double c = this->z * p.z;
     return a + b + c;
 }
 
-Point Point::crossProduct(Point p) const {
+Point Point::crossProduct(const Point& p) const {
     double a = y * p.z - z * p.y;
     double b = z * p.x - x * p.z;
     double c = x * p.y - y * p.x;
@@ -98,7 +124,7 @@ void Point::normalize() {
     z = z / length;
 }
 
-Point Point::subtract(Point p) const {
+Point Point::subtract(const Point& p) const {
     return Point(x - p.x, y - p.y, z - p.z);
 }
 
@@ -106,18 +132,96 @@ Point Point::subtract(Point p) const {
 class Triangle {
 public:
     vector<Point> points;
-    vector<int> color;
+    Color color;
 
     Triangle(vector<Point> points);
+    double getMaxY();
+    double getMinY();
+    double getMaxX();
+    double getMinX();
+    vector<pair<double, double>> getColumns(double ys, double leftX, double dx);
 };
 
 Triangle::Triangle(vector<Point> points) {
     for (int i = 0; i < 3; i++) {
         this->points.push_back(points[i]);
     }
-    for (int i = 0; i < 3; i++) {
-        this->color.push_back(rand() % 256);
+    color = Color(rand() % 256, rand() % 256, rand() % 256);
+}
+
+double Triangle::getMaxY() {
+    return max(max(points[0].y, points[1].y), points[2].y);
+}
+
+double Triangle::getMinY() {
+    return min(min(points[0].y, points[1].y), points[2].y);
+}
+
+double Triangle::getMaxX() {
+    return max(max(points[0].x, points[1].x), points[2].x);
+}
+
+double Triangle::getMinX() {
+    return min(min(points[0].x, points[1].x), points[2].x);
+}
+
+vector<pair<double, double>> Triangle::getColumns(double ys, double leftX, double dx) {
+    double xs, zs;
+    vector<pair<double, double>> columns, finalColumns;
+    double minX = getMinX();
+    double maxX = getMaxX();
+
+    Point a, b, c;
+    a = points[0];
+    b = points[1];
+    c = points[2];
+
+    //    edge a - b
+    double xa = a.x + ((ys - a.y)/(b.y - a.y))*(b.x - a.x);
+    double za = a.z + ((ys - a.y)/(b.y - a.y))*(b.z - a.z);
+    int s1 = (int) round(abs(leftX - xa) / dx);
+    //    edge b - c
+    double xb = b.x + ((ys - b.y)/(c.y - b.y))*(c.x - b.x);
+    double zb = b.z + ((ys - b.y)/(c.y - b.y))*(c.z - b.z);
+    int s2 = (int) round(abs(leftX - xb) / dx);
+    //    edge c - a
+    double xc = c.x + ((ys - c.y)/(a.y - c.y))*(a.x - c.x);
+    double zc = c.z + ((ys - c.y)/(a.y - c.y))*(a.z - c.z);
+    int s3 = (int) round(abs(leftX - xc) / dx);
+
+
+    if (!isinf(xa) && !isinf(xb) && !isinf(xc)) {
+        if (s1 == s2) {
+            columns.push_back(make_pair(xa, za));
+            columns.push_back(make_pair(xc, zc));
+        }
+        else if (s2 == s3) {
+            columns.push_back(make_pair(xb, zb));
+            columns.push_back(make_pair(xa, za));
+        }
+        else if (s3 == s1) {
+            columns.push_back(make_pair(xc, zc));
+            columns.push_back(make_pair(xb, zb));
+        } else {
+            columns.push_back(make_pair(xa, za));
+            columns.push_back(make_pair(xb, zb));
+            columns.push_back(make_pair(xc, zc));
+        }
+    } else {
+        if (!isinf(xa)) columns.push_back(make_pair(xa, za));
+        if (!isinf(xb)) columns.push_back(make_pair(xb, zb));
+        if (!isinf(xc)) columns.push_back(make_pair(xc, zc));
     }
+
+    for (int i = 0; i < columns.size(); i++) {
+        xs = columns[i].first;
+        zs = columns[i].second;
+        if (xs >= minX && xs <= maxX) {
+            finalColumns.push_back(make_pair(xs, zs));
+        }
+    }
+
+    return finalColumns;
 }
 
 
@@ -126,9 +230,8 @@ public:
     double matrix[4][4];
     TransformationMatrix() {}
     TransformationMatrix(double matrix[4][4]);
-    Point transformPoint(Point p);
+    Point transformPoint(const Point& p);
     TransformationMatrix product(TransformationMatrix t);
-    void print();
     static TransformationMatrix identity();
     static TransformationMatrix translate(double tx, double ty, double tz);
     static TransformationMatrix scale(double sx, double sy, double sz);
@@ -171,7 +274,7 @@ TransformationMatrix TransformationMatrix::scale(double sx, double sy, double sz
     return t;
 }
 
-Point RodriguesFormula(Point rotateAxis, Point rotateVector, double angle) {
+Point RodriguesFormula(const Point& rotateAxis, const Point& rotateVector, double angle) {
      Point p1 = rotateAxis.scalarMultiply(cos(angle));
      double temp = rotateVector.dotProduct(rotateAxis) * (1 - cos(angle));
      Point p2 = rotateVector.scalarMultiply(temp);
@@ -196,7 +299,7 @@ TransformationMatrix TransformationMatrix::rotate(double angle, double ax, doubl
     return t;
 }
 
-Point TransformationMatrix::transformPoint(Point p) {
+Point TransformationMatrix::transformPoint(const Point& p) {
     Point transformedPoint = Point();
     double a, b, sum;
     for (int i = 0; i < 4; i++) {
@@ -229,16 +332,6 @@ TransformationMatrix TransformationMatrix::product(TransformationMatrix t) {
     }
 
     return res;
-}
-
-void TransformationMatrix::print() {
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 4; j++) {
-            cout << this->matrix[i][j] << " ";
-        }
-        cout << endl;
-    }
-    cout << endl;
 }
 
 
@@ -413,13 +506,15 @@ void loadConfig() {
     configFile >> xLimit;
     configFile >> yLimit;
     configFile >> zFrontLimit >> zRearLimit;
+    configFile.close();
 }
 
 vector<Triangle> generateTriangles(vector<Point> points) {
+
     vector<Triangle> triangles;
 
     for (int i = 0; i < points.size(); i += 3) {
-        vector<Point> triPoints(3);
+        vector<Point> triPoints;
         for (int j = 0; j < 3; j++) {
             triPoints.push_back(points[i+j]);
         }
@@ -427,6 +522,139 @@ vector<Triangle> generateTriangles(vector<Point> points) {
         triangles.push_back(t);
     }
     return triangles;
+}
+
+void zBufferAlgorithm(vector<Point> points) {
+
+    vector<Triangle> triangles = generateTriangles(points);
+
+
+    double xLeft = xLimit;
+    double xRight = -xLimit;
+    double dx = (xRight - xLeft) / screenWidth;
+
+    double yBottom = yLimit;
+    double yTop = -yLimit;
+    double dy = (yTop - yBottom) / screenHeight;
+
+    double topY = yTop - dy / 2;
+    double bottomY = yBottom + dy / 2;
+    double leftX = xLeft + dx / 2;
+    double rightX = xRight - dx / 2;
+
+    vector<vector<double>> zBuffer;
+    vector<double> zRowVector;
+    bitmap_image image(screenWidth, screenHeight);
+
+    for (int i = 0; i < screenHeight; i++) {
+        zRowVector.clear();
+        for (int j = 0; j < screenWidth; j++) {
+            zRowVector.push_back(zRearLimit);
+            image.set_pixel(i, j, 0, 0, 0);
+        }
+        zBuffer.push_back(zRowVector);
+    }
+
+    int top_scanline, bottom_scanline, left_scanline, right_scanline;
+    double maxY, minY, maxX, minX;
+    for (int i = 0; i < triangles.size(); i++) {
+        Triangle triangle = triangles[i];
+
+        maxY = triangle.getMaxY();
+        if (maxY > topY) {
+            top_scanline = 0;
+        } else {
+            top_scanline = (int) round(abs(topY - maxY) / dy);
+        }
+
+        minY = triangle.getMinY();
+        if (minY < bottomY) {
+            bottom_scanline = screenHeight - 1;
+        } else {
+            bottom_scanline = (int) round(abs(topY - minY) / dy);
+        }
+
+        cout << "Triangle " << i << endl;
+        cout << "top - " << top_scanline << "\tbottom - " << bottom_scanline << endl;
+
+        for (int row = top_scanline; row <= bottom_scanline; row++) {
+            double ys = topY - row * dy;
+            vector<pair<double, double>> columns = triangle.getColumns(ys, leftX, dx);
+
+            double za, zb;
+            if (columns.empty()) continue;
+            if (columns.size() == 1) {
+                minX = columns[0].first;
+                maxX = columns[0].first;
+                za = columns[0].second;
+                zb = columns[0].second;
+            } else {
+                if (columns[0].first <= columns[1].first) {
+                    minX = columns[0].first;
+                    maxX = columns[1].first;
+                    za = columns[0].second;
+                    zb = columns[1].second;
+                } else {
+                    minX = columns[1].first;
+                    maxX = columns[0].first;
+                    za = columns[1].second;
+                    zb = columns[0].second;
+                }
+            }
+
+            if (minX < leftX) {
+                left_scanline = 0;
+            } else {
+                left_scanline = (int) round(abs(leftX - minX) / dx);
+            }
+
+            if (maxX > rightX) {
+                right_scanline = screenWidth - 1;
+            } else {
+                right_scanline = (int) round(abs(leftX - maxX) / dx);
+            }
+            cout << "left - " << left_scanline << "\tright - " << right_scanline << endl;
+
+            double z, inc;
+            z = za;
+            if (right_scanline > left_scanline) {
+                inc = (zb - za) / (right_scanline - left_scanline);
+            } else {
+                inc = 0;
+            }
+
+            if (maxX - minX != 0) {
+                for (int col = left_scanline; col <= right_scanline; col++) {
+                    if (z >= zFrontLimit && z <= zRearLimit && z < zBuffer[row][col]) {
+                        zBuffer[row][col] = z;
+                        Color c = triangle.color;
+                        image.set_pixel(col, row, c.r, c.g, c.b);
+                    }
+                    z += inc;
+                }
+            }
+        }
+    }
+
+    // save the image and z buffer
+    image.save_image("output.bmp");
+    ofstream bufferFile;
+    bufferFile.open("z_buffer.txt");
+    for (int row = 0; row < zBuffer.size(); row++) {
+        for (int col = 0; col < zBuffer[row].size(); col++) {
+            if (zBuffer[row][col] < zRearLimit) {
+                bufferFile << zBuffer[row][col] << "\t";
+            }
+        }
+        bufferFile << endl;
+    }
+
+    // clear the buffer and the image
+    for (int i = 0; i < zBuffer.size(); i++) {
+        zBuffer[i].clear();
+    }
+    zBuffer.clear();
+    image.clear();
 }
 
 
@@ -437,6 +665,6 @@ int main() {
     vector<Point> stage3Points = projectionTransformation(stage2Points);
 
     loadConfig();
-    vector<Triangle> triangles = generateTriangles(stage3Points);
+    zBufferAlgorithm(stage3Points);
     return 0;
 }
